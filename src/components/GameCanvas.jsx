@@ -163,7 +163,7 @@ const GameCanvas = ({ gameState, onTileClick, interactionMode }) => {
     // INPUT HANDLERS
     const handleWheel = (e) => {
         e.preventDefault();
-        const scale = e.deltaY > 0 ? 0.9 : 1.1;
+        const scale = e.deltaY > 0 ? 0.95 : 1.05; // Slower zoom speed
         setCamera(prev => ({ ...prev, zoom: Math.max(0.5, Math.min(3, prev.zoom * scale)) }));
     };
 

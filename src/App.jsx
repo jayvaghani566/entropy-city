@@ -28,6 +28,10 @@ function App() {
     if (state.gameOver) return;
 
     if (interactionMode === 'sensor') {
+      if (node.status === 'failed') {
+        dispatch({ type: ACTION_TYPES.REPAIR_NODE, payload: node.id });
+        return;
+      }
       if (!node.hasSensor) {
         dispatch({ type: ACTION_TYPES.PLACE_SENSOR, payload: node.id });
       }
@@ -125,6 +129,11 @@ function App() {
           <div style={{ color: hoveredNode.status === 'active' ? '#00ff88' : '#ff3333' }}>
             Status: {hoveredNode.status.toUpperCase()}
           </div>
+          {hoveredNode.status === 'failed' && (
+            <div style={{ marginTop: '5px', color: '#ffcc00', fontStyle: 'italic' }}>
+              Click to Repair ($50)
+            </div>
+          )}
         </div>
       )}
     </div>

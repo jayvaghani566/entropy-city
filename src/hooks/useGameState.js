@@ -13,7 +13,8 @@ export const ACTION_TYPES = {
     ADD_CONNECTION: 'ADD_CONNECTION',
     PAUSE_TOGGLE: 'PAUSE_TOGGLE',
     SET_SPEED: 'SET_SPEED',
-    GAME_OVER: 'GAME_OVER'
+    GAME_OVER: 'GAME_OVER',
+    REPAIR_NODE: 'REPAIR_NODE'
 };
 
 const initialState = {
@@ -78,15 +79,41 @@ const gameReducer = (state, action) => {
             // Limit log size
             if (newLog.length > 20) newLog = newLog.slice(0, 20);
 
+            // PASSIVE INCOME:
+            // Earn $1 per tick for every active node?
+            // Tick is 1 sec. 40 nodes -> $40/sec is too much.
+            // Maybe $1 per 5 active nodes per tick?
+            // Or just a flat rate + bonus.
+            const activeCount = newNodes.filter(n => n.status === 'active').length;
+            const income = Math.floor(activeCount / 2); // E.g. 20 active = $10/sec.
+
             return {
                 ...state,
                 nodes: newNodes,
                 timeElapsed: newTime,
                 entropy: currentEntropy,
+                budget: state.budget + income,
                 gameOver: currentEntropy > 9.0,
-                victory: newTime >= 600 && currentEntropy <= 7.0, // Must hold logic
+                victory: newTime >= 600 && currentEntropy <= 7.0,
                 eventLog: newLog
             };
+
+        case ACTION_TYPES.REPAIR_NODE: {
+            const nodeId = action.payload;
+            if (state.budget < 50) return state; // Cost 50 to repair
+
+            const repairedNodes = state.nodes.map(n =>
+                n.id === nodeId ? { ...n, status: 'active' } : n
+            );
+
+            return {
+                ...state,
+                nodes: repairedNodes,
+                budget: state.budget - 50,
+                entropy: calculateEntropy(repairedNodes, state.links),
+                eventLog: [{ time: state.timeElapsed, message: 'Node repaired.', type: 'info' }, ...state.eventLog]
+            };
+        }
 
         case ACTION_TYPES.PLACE_SENSOR:
             const nodeId = action.payload;
