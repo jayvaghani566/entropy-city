@@ -1,21 +1,26 @@
 // Import the functions you need from the SDKs you need
 import { initializeApp } from "firebase/app";
 import { getDatabase } from "firebase/database";
+import { getAnalytics } from "firebase/analytics";
 
-// TODO: Replace the following with your app's Firebase project configuration
-// See: https://firebase.google.com/docs/web/setup#available-libraries
+// Your web app's Firebase configuration
 const firebaseConfig = {
-    apiKey: "YOUR_API_KEY",
-    authDomain: "your-project.firebaseapp.com",
-    databaseURL: "https://your-project-default-rtdb.firebaseio.com",
-    projectId: "your-project",
-    storageBucket: "your-project.appspot.com",
-    messagingSenderId: "1234567890",
-    appId: "1:1234567890:web:abcdef123456"
+    apiKey: "AIzaSyA6tzeoijYVYRSGhAsMMPs6FfZDZ6seSgE",
+    authDomain: "entropy-city.firebaseapp.com",
+    // Standard Realtime Database URL pattern based on project ID
+    databaseURL: "https://entropy-city-default-rtdb.firebaseio.com",
+    projectId: "entropy-city",
+    storageBucket: "entropy-city.firebasestorage.app",
+    messagingSenderId: "660792049273",
+    appId: "1:660792049273:web:740f012c525b76f10f9ea8",
+    measurementId: "G-GLWSFPB3YX"
 };
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
+
+// Initialize Realtime Database and export
 const db = getDatabase(app);
 
-export { db };
+export { db, app, analytics };

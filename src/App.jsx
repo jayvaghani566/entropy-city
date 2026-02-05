@@ -1,13 +1,14 @@
 import React, { useState, useMemo } from 'react';
 import { useGameState, ACTION_TYPES } from './hooks/useGameState';
-import GameBoard from './components/GameBoard';
-import Dashboard from './components/Dashboard';
+import GameCanvas from './components/GameCanvas';
+import Sidebar from './components/Sidebar';
 
 function App() {
-  const { state, dispatch } = useGameState();
+  const { state, dispatch, saveGame, loadGame } = useGameState();
   const [interactionMode, setInteractionMode] = useState('sensor'); // 'sensor' or 'connect'
+  const [sourceNode, setSourceNode] = useState(null);
 
-  // Calculate generic counts for Dashboard
+  // Calculate generic counts for Sidebar
   const nodeCounts = useMemo(() => {
     const counts = { active: 0, failed: 0, unknown: 0 };
     state.nodes.forEach(n => {
@@ -19,15 +20,40 @@ function App() {
     return counts;
   }, [state.nodes]);
 
+  const [selectedNode, setSelectedNode] = useState(null);
+  const [hoveredNode, setHoveredNode] = useState(null);
+
   const handleNodeClick = (node) => {
+    setSelectedNode(node); // Always select on click
     if (state.gameOver) return;
 
     if (interactionMode === 'sensor') {
       if (!node.hasSensor) {
         dispatch({ type: ACTION_TYPES.PLACE_SENSOR, payload: node.id });
       }
+    } else if (interactionMode === 'connect') {
+      if (!sourceNode) {
+        setSourceNode(node);
+      } else {
+        if (sourceNode.id !== node.id) {
+          dispatch({
+            type: ACTION_TYPES.ADD_LINK,
+            payload: { source: sourceNode.id, target: node.id }
+          });
+          setSourceNode(null);
+        } else {
+          setSourceNode(null);
+        }
+      }
     }
-    // TODO: Connect logic
+  };
+
+  const handleNodeHover = (node, screenX, screenY) => {
+    if (node) {
+      setHoveredNode({ ...node, screenX, screenY });
+    } else {
+      setHoveredNode(null);
+    }
   };
 
   const handleDashboardAction = (action) => {
@@ -37,6 +63,10 @@ function App() {
       setInteractionMode('sensor');
     } else if (action === 'MODE_CONNECT') {
       setInteractionMode('connect');
+    } else if (action === 'SAVE') {
+      saveGame();
+    } else if (action === 'LOAD') {
+      loadGame();
     }
   };
 
@@ -57,14 +87,14 @@ function App() {
   }
 
   return (
-    <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', background: '#000' }}>
-      <GameBoard
-        nodes={state.nodes}
-        links={state.links}
-        onNodeClick={handleNodeClick}
+    <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', background: '#0a0a0a' }}>
+      <GameCanvas
+        gameState={state}
+        onTileClick={handleNodeClick}
+        onTileHover={handleNodeHover}
         interactionMode={interactionMode}
       />
-      <Dashboard
+      <Sidebar
         entropy={state.entropy}
         budget={state.budget}
         timeElapsed={state.timeElapsed}
@@ -72,7 +102,31 @@ function App() {
         currentMode={interactionMode}
         isPlaying={state.isPlaying}
         nodeCounts={nodeCounts}
+        eventLog={state.eventLog}
+        selectedNode={selectedNode}
       />
+      {/* Tooltip / Inspection Overlay */}
+      {hoveredNode && (
+        <div style={{
+          position: 'absolute',
+          left: hoveredNode.screenX + 20,
+          top: hoveredNode.screenY - 20,
+          background: 'rgba(0, 20, 40, 0.9)',
+          border: '1px solid #00ccff',
+          padding: '10px',
+          borderRadius: '5px',
+          pointerEvents: 'none',
+          zIndex: 1000,
+          color: '#fff',
+          fontSize: '0.8rem'
+        }}>
+          <div style={{ fontWeight: 'bold', color: '#00ccff' }}>{hoveredNode.name}</div>
+          <div style={{ color: '#aaa' }}>Type: {hoveredNode.type}</div>
+          <div style={{ color: hoveredNode.status === 'active' ? '#00ff88' : '#ff3333' }}>
+            Status: {hoveredNode.status.toUpperCase()}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

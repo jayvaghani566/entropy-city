@@ -26,6 +26,7 @@ const initialState = {
     gameSpeed: 1,
     gameOver: false,
     victory: false,
+    eventLog: [{ time: 0, message: 'Simulation initialized.', type: 'info' }],
     history: []
 };
 
@@ -43,6 +44,7 @@ const gameReducer = (state, action) => {
             if (!state.isPlaying || state.gameOver) return state;
 
             const newTime = state.timeElapsed + 1;
+            let newLog = [...state.eventLog]; // Clone log
 
             // DEGRADATION LOGIC:
             // Small chance for a node to fail
@@ -51,11 +53,16 @@ const gameReducer = (state, action) => {
             const newNodes = state.nodes.map(node => {
                 // Random failure chance: 0.1% per tick per node
                 if (node.status === 'active' && Math.random() < 0.001) {
+                    newLog.unshift({
+                        time: newTime,
+                        message: `Failure detected at ${node.name || node.id}`,
+                        type: 'critical'
+                    });
                     return { ...node, status: 'failed' };
                 }
                 // Random recovery attempt? Or manual fix only?
-                // Prompt says "Events: Blackout, Sensor Failure". 
-                // Real-time entropy depends on state. 
+                // Prompt says "Events: Blackout, Sensor Failure".
+                // Real-time entropy depends on state.
                 // Maybe degrade to "degraded" first.
                 return node;
             });
@@ -68,13 +75,17 @@ const gameReducer = (state, action) => {
             // Loss: Entropy > 9.0 for 30s. We need to track "highEntropyDuration".
             // Simplified: Instant fail if > 9.0 for now, or just track it.
 
+            // Limit log size
+            if (newLog.length > 20) newLog = newLog.slice(0, 20);
+
             return {
                 ...state,
                 nodes: newNodes,
                 timeElapsed: newTime,
                 entropy: currentEntropy,
                 gameOver: currentEntropy > 9.0,
-                victory: newTime >= 600 && currentEntropy <= 7.0 // Must hold logic
+                victory: newTime >= 600 && currentEntropy <= 7.0, // Must hold logic
+                eventLog: newLog
             };
 
         case ACTION_TYPES.PLACE_SENSOR:
@@ -89,16 +100,59 @@ const gameReducer = (state, action) => {
                 ...state,
                 nodes: nodesWithSensor,
                 budget: state.budget - 100,
-                entropy: calculateEntropy(nodesWithSensor)
+                entropy: calculateEntropy(nodesWithSensor, state.links)
             };
 
         case ACTION_TYPES.PAUSE_TOGGLE:
             return { ...state, isPlaying: !state.isPlaying };
 
+        case ACTION_TYPES.ADD_LINK: {
+            // Check cost
+            if (state.budget < 50) return state; // Cost 50
+
+            // Check if link exists
+            const { source, target } = action.payload;
+            const exists = state.links.some(l =>
+                (l.source === source && l.target === target) ||
+                (l.source === target && l.target === source)
+            );
+            if (exists) return state;
+
+            // Add Link (using IDs)
+            // Note: GameCanvas renders links using object refs if D3, but we use raw IDs or objects.
+            // Our generator makes object refs for D3 but our simple renderer handles simple objects?
+            // GameCanvas expects {source: {id...}, target: {id...}} OR {source: id, target: id}
+            // Let's stick to IDs for state simplicity if possible, or object structure.
+            // The generator effectively returns whatever D3-force might have mutated if we ran it, 
+            // but we aren't running D3-force anymore in V2!
+            // So Generator just returns { id: ... } objects.
+
+            return {
+                ...state,
+                budget: state.budget - 50,
+                links: [...state.links, { source: source, target: target }]
+            };
+        }
+
+        case 'LOAD_GAME':
+            return {
+                ...state,
+                ...action.payload,
+                nodes: action.payload.nodes || [],
+                links: action.payload.links || [],
+                // Ensure helper fields are reset if needed
+                isPlaying: false
+            };
+
         default:
             return state;
     }
 };
+
+import { ref, set, get, child } from 'firebase/database';
+import { db } from '../firebase/config';
+
+// ... existing reducer ...
 
 export const useGameState = () => {
     const [state, dispatch] = useReducer(gameReducer, initialState);
@@ -106,6 +160,8 @@ export const useGameState = () => {
 
     // Initial Game Setup
     useEffect(() => {
+        // Only gen graph if no load happening? 
+        // For MVP, we auto-gen. Load will overwrite.
         const { nodes, links } = generateCityGraph(NODE_COUNT);
         dispatch({ type: ACTION_TYPES.INIT_GAME, payload: { nodes, links } });
     }, []);
@@ -122,5 +178,33 @@ export const useGameState = () => {
         return () => clearInterval(timerRef.current);
     }, [state.isPlaying, state.gameSpeed, state.gameOver, state.victory]);
 
-    return { state, dispatch };
+    // Persistence Functions
+    const saveGame = async () => {
+        try {
+            await set(ref(db, 'savegame'), state);
+            alert('Game Saved Successfully!'); // Simple feedback
+        } catch (e) {
+            console.error(e);
+            alert('Save Failed: ' + e.message);
+        }
+    };
+
+    const loadGame = async () => {
+        try {
+            const snapshot = await get(child(ref(db), 'savegame'));
+            if (snapshot.exists()) {
+                const data = snapshot.val();
+                // We need a LOAD_GAME action
+                dispatch({ type: 'LOAD_GAME', payload: data });
+                alert('Game Loaded!');
+            } else {
+                alert('No save game found.');
+            }
+        } catch (e) {
+            console.error(e);
+            alert('Load Failed: ' + e.message);
+        }
+    };
+
+    return { state, dispatch, saveGame, loadGame };
 };
